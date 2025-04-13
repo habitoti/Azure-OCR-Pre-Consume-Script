@@ -1,0 +1,4 @@
+azure-ai-formrecognizer>=3.2.0
+PyMuPDF>=1.22.5
+Pillow
+img2pdf
