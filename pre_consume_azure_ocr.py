@@ -37,6 +37,13 @@ def overlay_text(pdf_path, texts, out_path):
             page.insert_textbox(rect, text, fontsize=0.1, overlay=False)
     doc.save(out_path)
 
+def remove_empty_pages(pdf_path, texts, out_path):
+    doc = fitz.open(pdf_path)
+    for i in reversed(range(len(doc))):  # rückwärts, damit Indizes stabil bleiben
+        if i >= len(texts) or len(texts[i].strip()) < 5:
+            doc.delete_page(i)
+    doc.save(out_path)
+
 def main():
     input_path = sys.argv[1]
     file_ext = os.path.splitext(input_path)[1].lower()
@@ -50,10 +57,13 @@ def main():
         source_pdf = input_path
 
     texts = run_azure_ocr(source_pdf)
-    output_pdf = input_path.replace(".pdf", "_ocr.pdf")
-    overlay_text(source_pdf, texts, output_pdf)
+    ocr_pdf = os.path.join(temp_dir, "with_ocr.pdf")
+    cleaned_pdf = input_path.replace(".pdf", "_ocr_cleaned.pdf")
 
-    print(output_pdf)
+    overlay_text(source_pdf, texts, ocr_pdf)
+    remove_empty_pages(ocr_pdf, texts, cleaned_pdf)
+
+    print(cleaned_pdf)
 
 if __name__ == "__main__":
     main()
