@@ -7,6 +7,7 @@ import logging
 import shutil
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
+from pdfminer.high_level import extract_text
 
 # Logging setup
 log_path = "/opt/paperless/data/log/paperless.log"
@@ -40,9 +41,11 @@ def overlay_text(pdf_path, texts, out_path):
     doc = fitz.open(pdf_path)
     for i, page in enumerate(doc):
         if i < len(texts):
-            text = texts[i]
-            rect = page.rect
-            page.insert_textbox(rect, text, fontsize=2.0, overlay=False)  # testbare Schrift
+            lines = texts[i].splitlines()
+            y = 40  # Startposition Y
+            for line in lines:
+                page.insert_text((40, y), line.strip(), fontsize=10)
+                y += 12  # Zeilenabstand
     doc.save(out_path)
 
 def is_visually_empty(page, threshold=10):
@@ -63,17 +66,17 @@ def remove_empty_pages(pdf_path, texts, out_path):
     doc.save(out_path)
     return removed
 
-def check_if_searchable(pdf_path):
+def check_pdfminer_text(path):
     try:
-        doc = fitz.open(pdf_path)
-        for i, page in enumerate(doc):
-            if page.get_text().strip():
-                logger.info(f"✔ Page {i+1} is searchable (contains text).")
-                return True
-        logger.warning("!!! No searchable text found in PDF according to fitz.get_text(). Paperless may re-OCR.")
-        return False
+        text = extract_text(path)
+        if text.strip():
+            logger.info("✔ PDF is searchable according to pdfminer (extract_text returned content).")
+            return True
+        else:
+            logger.warning("!!! pdfminer sees NO searchable text – Paperless may re-OCR.")
+            return False
     except Exception as e:
-        logger.warning(f"Error during searchable check: {e}")
+        logger.error(f"pdfminer failed: {e}")
         return False
 
 def main():
@@ -91,7 +94,7 @@ def main():
 
             texts = run_azure_ocr(input_path)
             overlay_text(input_path, texts, temp_pdf)
-            logger.info("Overlay text applied with fontsize=2.0 and overlay=False")
+            logger.info("Text overlay applied using insert_text per line")
 
             removed = remove_empty_pages(temp_pdf, texts, final_pdf)
             logger.info(f"Removed {removed} empty pages")
@@ -102,7 +105,7 @@ def main():
             size_kb = os.path.getsize(input_path) / 1024
             logger.info(f"Final PDF size: {size_kb:.1f} KB")
 
-            check_if_searchable(input_path)
+            check_pdfminer_text(input_path)
 
             print(input_path)
 
