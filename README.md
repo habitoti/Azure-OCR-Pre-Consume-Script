@@ -13,19 +13,23 @@ This script allows Paperless-ngx to use Azure Document Intelligence instead of l
 
 ### 1. Clone and set up
 
-```bas
+```bash
 git clone <this-repo-url>
 cd azure_ocr_preconsume
 pip install -r requirements.txt
+chmod +x pre_consume_azure_ocr.py
 ```
 
 ### 2. Set your Azure credentials
 
-Add to paperless.conf (bare metal) or add to Docker-Setup:
 
+Add to paperless.conf (bare metal) or to Docker setup:
+
+``` Environment
 PAPERLESS_PRE_CONSUME_SCRIPT=/path/to/pre_consume_azure_ocr.py
 AZURE_FORM_RECOGNIZER_ENDPOINT="https://<your-endpoint>.cognitiveservices.azure.com/"
 AZURE_FORM_RECOGNIZER_KEY="<your-key>"
+```
 
 Paperless will now use this script before importing a document.
 
