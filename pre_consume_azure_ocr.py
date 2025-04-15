@@ -8,16 +8,23 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from utils import image_to_pdf
 
-# Logging setup
+# Logging setup (Paperless-Style)
 log_path = "/opt/paperless/data/log/paperless.log"
-logging.basicConfig(filename=log_path, level=logging.INFO,
-                    format="Azure OCR: %(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("azure.ocr")
+logger.setLevel(logging.DEBUG)
+file_handler = logging.FileHandler(log_path)
+formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
 
 # Azure credentials
 endpoint = os.environ.get("AZURE_FORM_RECOGNIZER_ENDPOINT")
 key = os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
 
 def run_azure_ocr(pdf_path):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(f"Sending file to Azure OCR: {pdf_path}")
+        logger.debug(f"OCR Endpoint: {endpoint}")
     with open(pdf_path, "rb") as f:
         poller = client.begin_analyze_document("prebuilt-read", document=f)
         result = poller.result()
@@ -57,13 +64,13 @@ def remove_empty_pages(pdf_path, texts, out_path):
 
 def main():
     input_path = sys.argv[1]
-    logging.info("Start pre_consume script for: %s", input_path)
+    logger.info(f"Start pre_consume script for: {input_path}")
 
     file_ext = os.path.splitext(input_path)[1].lower()
     temp_dir = tempfile.mkdtemp()
 
     if not endpoint or not key:
-        logging.error("Azure credentials not set")
+        logger.error("Azure credentials not set")
         sys.exit(1)
 
     global client
@@ -78,22 +85,23 @@ def main():
             source_pdf = input_path
 
         texts = run_azure_ocr(source_pdf)
-        logging.info("Azure OCR successful, %d pages returned", len(texts))
+        total_chars = sum(len(t) for t in texts)
+        logger.info(f"OCR successful, {len(texts)} pages returned, {total_chars} characters")
 
         ocr_pdf = os.path.join(temp_dir, "with_ocr.pdf")
         cleaned_pdf = input_path.replace(".pdf", "_ocr_cleaned.pdf")
 
         overlay_text(source_pdf, texts, ocr_pdf)
-        logging.info("Overlay text complete")
+        logger.info("Overlay text complete")
 
         removed_pages = remove_empty_pages(ocr_pdf, texts, cleaned_pdf)
-        logging.info("Empty pages removed: %d; final file: %s", removed_pages, cleaned_pdf)
+        logger.info(f"Empty pages removed: {removed_pages}; final file: {cleaned_pdf}")
 
-        logging.info("Script finished successfully")
+        logger.info("Script finished successfully")
         print(cleaned_pdf)
 
     except Exception as e:
-        logging.error("Unhandled exception: %s", str(e))
+        logger.error(f"Unhandled exception: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":
