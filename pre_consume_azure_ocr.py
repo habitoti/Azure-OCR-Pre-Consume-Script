@@ -44,9 +44,15 @@ def overlay_text(pdf_path, texts, out_path):
             lines = texts[i].splitlines()
             y = 40  # Startposition Y
             for line in lines:
-                page.insert_text((40, y), line.strip(), fontsize=10)
+                page.insert_text((40, y), line.strip(), fontsize=10, fontname="helv")
                 y += 12  # Zeilenabstand
-    doc.save(out_path)
+    # Speichern mit maximaler Kompatibilität
+    doc.set_metadata({
+        "producer": "Azure OCR Overlay Script",
+        "title": "Searchable PDF",
+        "author": "Paperless OCR",
+    })
+    doc.save(out_path, garbage=4, deflate=True, clean=True, incremental=False)
 
 def is_visually_empty(page, threshold=10):
     pix = page.get_pixmap(dpi=50, colorspace="gray")
@@ -81,7 +87,7 @@ def check_pdfminer_text(path):
 
 def main():
     input_path = sys.argv[1]
-    logger.info(f"Start overlay OCR for: {input_path}")
+    logger.info(f"Start improved overlay OCR for: {input_path}")
 
     if not endpoint or not key:
         logger.error("Azure credentials not set.")
@@ -94,7 +100,7 @@ def main():
 
             texts = run_azure_ocr(input_path)
             overlay_text(input_path, texts, temp_pdf)
-            logger.info("Text overlay applied using insert_text per line")
+            logger.info("Text overlay applied using insert_text per line with Helvetica font")
 
             removed = remove_empty_pages(temp_pdf, texts, final_pdf)
             logger.info(f"Removed {removed} empty pages")
