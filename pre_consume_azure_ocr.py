@@ -3,19 +3,19 @@ import sys
 import os
 import tempfile
 import fitz  # PyMuPDF
+import logging
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from utils import image_to_pdf
 
-# Azure Credentials from ENV
+# Logging setup
+log_path = "/opt/paperless/data/log/paperless.log"
+logging.basicConfig(filename=log_path, level=logging.INFO,
+                    format="Azure OCR: %(asctime)s [%(levelname)s] %(message)s")
+
+# Azure credentials
 endpoint = os.environ.get("AZURE_FORM_RECOGNIZER_ENDPOINT")
 key = os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
-
-if not endpoint or not key:
-    print("Azure credentials not set", file=sys.stderr)
-    sys.exit(1)
-
-client = DocumentAnalysisClient(endpoint, AzureKeyCredential(key))
 
 def run_azure_ocr(pdf_path):
     with open(pdf_path, "rb") as f:
@@ -37,33 +37,64 @@ def overlay_text(pdf_path, texts, out_path):
             page.insert_textbox(rect, text, fontsize=0.1, overlay=False)
     doc.save(out_path)
 
+def is_visually_empty(page, threshold=10):
+    pix = page.get_pixmap(dpi=50, colorspace="gray")
+    pixel_data = pix.samples
+    nonwhite_pixels = sum(1 for px in pixel_data if px < 250)
+    return nonwhite_pixels < threshold
+
 def remove_empty_pages(pdf_path, texts, out_path):
     doc = fitz.open(pdf_path)
-    for i in reversed(range(len(doc))):  # rückwärts, damit Indizes stabil bleiben
-        if i >= len(texts) or len(texts[i].strip()) < 5:
+    removed = 0
+    for i in reversed(range(len(doc))):
+        text_empty = i >= len(texts) or len(texts[i].strip()) < 5
+        visual_empty = is_visually_empty(doc[i])
+        if text_empty and visual_empty:
             doc.delete_page(i)
+            removed += 1
     doc.save(out_path)
+    return removed
 
 def main():
     input_path = sys.argv[1]
+    logging.info("Start pre_consume script for: %s", input_path)
+
     file_ext = os.path.splitext(input_path)[1].lower()
     temp_dir = tempfile.mkdtemp()
-    
-    if file_ext in [".jpg", ".jpeg", ".png", ".tiff", ".bmp"]:
-        temp_pdf = os.path.join(temp_dir, "converted.pdf")
-        image_to_pdf(input_path, temp_pdf)
-        source_pdf = temp_pdf
-    else:
-        source_pdf = input_path
 
-    texts = run_azure_ocr(source_pdf)
-    ocr_pdf = os.path.join(temp_dir, "with_ocr.pdf")
-    cleaned_pdf = input_path.replace(".pdf", "_ocr_cleaned.pdf")
+    if not endpoint or not key:
+        logging.error("Azure credentials not set")
+        sys.exit(1)
 
-    overlay_text(source_pdf, texts, ocr_pdf)
-    remove_empty_pages(ocr_pdf, texts, cleaned_pdf)
+    global client
+    client = DocumentAnalysisClient(endpoint, AzureKeyCredential(key))
 
-    print(cleaned_pdf)
+    try:
+        if file_ext in [".jpg", ".jpeg", ".png", ".tiff", ".bmp"]:
+            temp_pdf = os.path.join(temp_dir, "converted.pdf")
+            image_to_pdf(input_path, temp_pdf)
+            source_pdf = temp_pdf
+        else:
+            source_pdf = input_path
+
+        texts = run_azure_ocr(source_pdf)
+        logging.info("Azure OCR successful, %d pages returned", len(texts))
+
+        ocr_pdf = os.path.join(temp_dir, "with_ocr.pdf")
+        cleaned_pdf = input_path.replace(".pdf", "_ocr_cleaned.pdf")
+
+        overlay_text(source_pdf, texts, ocr_pdf)
+        logging.info("Overlay text complete")
+
+        removed_pages = remove_empty_pages(ocr_pdf, texts, cleaned_pdf)
+        logging.info("Empty pages removed: %d; final file: %s", removed_pages, cleaned_pdf)
+
+        logging.info("Script finished successfully")
+        print(cleaned_pdf)
+
+    except Exception as e:
+        logging.error("Unhandled exception: %s", str(e))
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
