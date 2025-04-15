@@ -5,6 +5,7 @@ import fitz  # PyMuPDF
 import logging
 import tempfile
 import shutil
+import time
 import requests
 
 # Logging setup (Paperless style)
@@ -51,7 +52,7 @@ def log_pdf_info(pdf_path):
     except Exception as e:
         logger.warning(f"Failed to log PDF info: {e}")
 
-def request_searchable_pdf(input_pdf, output_pdf):
+def request_searchable_pdf(input_pdf, output_pdf, max_wait=30):
     if not endpoint or not key:
         logger.error("Azure credentials not set.")
         sys.exit(1)
@@ -66,14 +67,43 @@ def request_searchable_pdf(input_pdf, output_pdf):
     with open(input_pdf, "rb") as f:
         response = requests.post(url, headers=headers, data=f)
 
-    if response.status_code != 200:
-        logger.error(f"Azure OCR request failed: {response.status_code} {response.text}")
+    if response.status_code == 202:
+        operation_location = response.headers.get("Operation-Location")
+        if not operation_location:
+            logger.error("No Operation-Location header in response.")
+            sys.exit(1)
+
+        logger.info("Azure accepted request, waiting for processing...")
+
+        # Polling loop
+        elapsed = 0
+        while elapsed < max_wait:
+            time.sleep(1)
+            elapsed += 1
+            poll = requests.get(operation_location, headers={"Ocp-Apim-Subscription-Key": key})
+            status = poll.json().get("status", "").lower()
+            logger.debug(f"Polling attempt at {elapsed}s: status={status}")
+            if status == "succeeded":
+                result_url = poll.json()["result"]["contentUrl"]
+                logger.debug(f"Result PDF URL: {result_url}")
+                result_response = requests.get(result_url)
+                if result_response.status_code == 200:
+                    with open(output_pdf, "wb") as out:
+                        out.write(result_response.content)
+                    return
+                else:
+                    logger.error(f"Failed to download result PDF: {result_response.status_code}")
+                    sys.exit(1)
+            elif status == "failed":
+                logger.error("Azure OCR failed during processing.")
+                sys.exit(1)
+
+        logger.error("Azure OCR polling timed out after %d seconds.", max_wait)
         sys.exit(1)
 
-    with open(output_pdf, "wb") as f:
-        f.write(response.content)
-
-    logger.debug("Azure OCR PDF saved to: %s", output_pdf)
+    else:
+        logger.error(f"Azure OCR request failed: {response.status_code} {response.text}")
+        sys.exit(1)
 
 def main():
     input_path = sys.argv[1]
@@ -84,7 +114,7 @@ def main():
             temp_output_pdf = os.path.join(tmpdir, "azure_ocr_output.pdf")
 
             request_searchable_pdf(input_path, temp_output_pdf)
-            logger.info("Azure OCR request successful")
+            logger.info("Azure OCR processing and download successful")
 
             removed = remove_empty_pages(temp_output_pdf)
             logger.info(f"Removed {removed} empty pages")
