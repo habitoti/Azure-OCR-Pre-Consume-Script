@@ -46,7 +46,6 @@ def overlay_text(pdf_path, texts, out_path):
             for line in lines:
                 page.insert_text((40, y), line.strip(), fontsize=10, fontname="helv")
                 y += 12  # Zeilenabstand
-    # Speichern mit maximaler Kompatibilität
     doc.set_metadata({
         "producer": "Azure OCR Overlay Script",
         "title": "Searchable PDF",
@@ -86,8 +85,12 @@ def check_pdfminer_text(path):
         return False
 
 def main():
-    input_path = sys.argv[1]
-    logger.info(f"Start improved overlay OCR for: {input_path}")
+    input_path = os.environ.get("DOCUMENT_WORKING_PATH")
+    if not input_path:
+        logger.error("DOCUMENT_WORKING_PATH not set.")
+        sys.exit(1)
+
+    logger.info(f"Start final OCR overlay on working path: {input_path}")
 
     if not endpoint or not key:
         logger.error("Azure credentials not set.")
@@ -106,7 +109,7 @@ def main():
             logger.info(f"Removed {removed} empty pages")
 
             shutil.copyfile(final_pdf, input_path)
-            logger.info("Original file replaced with OCR-enhanced version")
+            logger.info("Replaced DOCUMENT_WORKING_PATH with OCR-enhanced version")
 
             size_kb = os.path.getsize(input_path) / 1024
             logger.info(f"Final PDF size: {size_kb:.1f} KB")
