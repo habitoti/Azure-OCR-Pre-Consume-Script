@@ -44,11 +44,11 @@ def overlay_text(pdf_path, texts, out_path):
             text = texts[i]
             rect = page.rect
             page.insert_textbox(rect, text, fontsize=1.0, overlay=True)
-    doc.set_metadata({
-        "producer": "Azure OCR Overlay Script",
-        "title": "Searchable PDF",
-        "author": "Paperless OCR",
-    })
+    # doc.set_metadata({
+    #    "producer": "Azure OCR Overlay Script",
+    #    "title": "Searchable PDF",
+    #    "author": "Paperless OCR",
+    #})
     doc.save(out_path, garbage=4, deflate=True, clean=True, incremental=False)
 
 def is_visually_empty(page, threshold=10):
@@ -85,7 +85,7 @@ def main():
         logger.error("DOCUMENT_WORKING_PATH not set.")
         sys.exit(1)
 
-    logger.info(f"Start simple overlay OCR on: {input_path}")
+    logger.debug(f"Start simple overlay OCR on: {input_path}")
 
     if not endpoint or not key:
         logger.error("Azure credentials not set.")
@@ -98,18 +98,19 @@ def main():
 
             texts = run_azure_ocr(input_path)
             overlay_text(input_path, texts, temp_pdf)
-            logger.info("Simple text overlay applied using insert_textbox")
+            # logger.debug("Simple text overlay applied using insert_textbox")
 
             removed = remove_empty_pages(temp_pdf, texts, final_pdf)
-            logger.info(f"Removed {removed} empty pages")
+            if removed > 0: 
+                logger.info(f"Removed {removed} empty pages")
 
             shutil.copyfile(final_pdf, input_path)
-            logger.info("Replaced working file with OCR-enhanced version")
+            logger.debug("Replaced working file with OCR-enhanced version")
 
             size_kb = os.path.getsize(input_path) / 1024
             logger.info(f"Final PDF size: {size_kb:.1f} KB")
 
-            debug_pdfminer_check(input_path)
+            # debug_pdfminer_check(input_path)
 
             print(input_path)
 
