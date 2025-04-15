@@ -75,16 +75,21 @@ def request_searchable_pdf(input_pdf, output_pdf, max_wait=30):
 
         logger.info("Azure accepted request, waiting for processing...")
 
-        # Polling loop
         elapsed = 0
         while elapsed < max_wait:
             time.sleep(1)
             elapsed += 1
             poll = requests.get(operation_location, headers={"Ocp-Apim-Subscription-Key": key})
-            status = poll.json().get("status", "").lower()
+            poll_json = poll.json()
+            status = poll_json.get("status", "").lower()
             logger.debug(f"Polling attempt at {elapsed}s: status={status}")
             if status == "succeeded":
-                result_url = poll.json()["result"]["contentUrl"]
+                try:
+                    result_url = poll_json["analyzeResult"]["contentUrl"]
+                except KeyError:
+                    logger.error("No 'contentUrl' found in analyzeResult")
+                    sys.exit(1)
+
                 logger.debug(f"Result PDF URL: {result_url}")
                 result_response = requests.get(result_url)
                 if result_response.status_code == 200:
