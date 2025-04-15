@@ -11,7 +11,7 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 # Logging setup
 log_path = "/opt/paperless/data/log/paperless.log"
 logger = logging.getLogger("azure.ocr")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)  # Nur INFO-Level Logging
 file_handler = logging.FileHandler(log_path)
 formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
 file_handler.setFormatter(formatter)
@@ -34,7 +34,6 @@ def run_azure_ocr(pdf_path):
 
     total_chars = sum(len(t) for t in pages_text)
     logger.info(f"OCR successful, {len(pages_text)} pages returned, {total_chars} characters")
-    logger.debug("Extracted OCR text:\n%s", "\n---\n".join(pages_text[:3]) + ("\n..." if len(pages_text) > 3 else ""))
     return pages_text
 
 def overlay_text(pdf_path, texts, out_path):
@@ -43,7 +42,8 @@ def overlay_text(pdf_path, texts, out_path):
         if i < len(texts):
             text = texts[i]
             rect = page.rect
-            page.insert_textbox(rect, text, fontsize=0.1, overlay=False)
+            # fontsize=1.0 and overlay=True to ensure Paperless sees the text
+            page.insert_textbox(rect, text, fontsize=1.0, overlay=True)
     doc.save(out_path)
 
 def is_visually_empty(page, threshold=10):
@@ -66,7 +66,7 @@ def remove_empty_pages(pdf_path, texts, out_path):
 
 def main():
     input_path = sys.argv[1]
-    logger.info(f"Start final overlay OCR for: {input_path}")
+    logger.info(f"Start overlay OCR for: {input_path}")
 
     if not endpoint or not key:
         logger.error("Azure credentials not set.")
@@ -79,13 +79,13 @@ def main():
 
             texts = run_azure_ocr(input_path)
             overlay_text(input_path, texts, temp_pdf)
-            logger.info("Overlay text applied")
+            logger.info("Overlay text applied with fontsize=1.0 and overlay=True")
 
             removed = remove_empty_pages(temp_pdf, texts, final_pdf)
             logger.info(f"Removed {removed} empty pages")
 
             shutil.copyfile(final_pdf, input_path)
-            logger.info("Original file replaced with OCR-enhanced version")
+            logger.info("Original file replaced with OCR-enhanced searchable version")
 
             size_kb = os.path.getsize(input_path) / 1024
             logger.info(f"Final PDF size: {size_kb:.1f} KB")
