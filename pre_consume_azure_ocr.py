@@ -11,7 +11,7 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 # Logging setup
 log_path = "/opt/paperless/data/log/paperless.log"
 logger = logging.getLogger("azure.ocr")
-logger.setLevel(logging.INFO)  # Nur INFO-Level Logging
+logger.setLevel(logging.INFO)
 file_handler = logging.FileHandler(log_path)
 formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
 file_handler.setFormatter(formatter)
@@ -42,8 +42,7 @@ def overlay_text(pdf_path, texts, out_path):
         if i < len(texts):
             text = texts[i]
             rect = page.rect
-            # fontsize=1.0 and overlay=True to ensure Paperless sees the text
-            page.insert_textbox(rect, text, fontsize=1.0, overlay=True)
+            page.insert_textbox(rect, text, fontsize=2.0, overlay=False)  # testbare Schrift
     doc.save(out_path)
 
 def is_visually_empty(page, threshold=10):
@@ -64,6 +63,19 @@ def remove_empty_pages(pdf_path, texts, out_path):
     doc.save(out_path)
     return removed
 
+def check_if_searchable(pdf_path):
+    try:
+        doc = fitz.open(pdf_path)
+        for i, page in enumerate(doc):
+            if page.get_text().strip():
+                logger.info(f"✔ Page {i+1} is searchable (contains text).")
+                return True
+        logger.warning("!!! No searchable text found in PDF according to fitz.get_text(). Paperless may re-OCR.")
+        return False
+    except Exception as e:
+        logger.warning(f"Error during searchable check: {e}")
+        return False
+
 def main():
     input_path = sys.argv[1]
     logger.info(f"Start overlay OCR for: {input_path}")
@@ -79,16 +91,18 @@ def main():
 
             texts = run_azure_ocr(input_path)
             overlay_text(input_path, texts, temp_pdf)
-            logger.info("Overlay text applied with fontsize=1.0 and overlay=True")
+            logger.info("Overlay text applied with fontsize=2.0 and overlay=False")
 
             removed = remove_empty_pages(temp_pdf, texts, final_pdf)
             logger.info(f"Removed {removed} empty pages")
 
             shutil.copyfile(final_pdf, input_path)
-            logger.info("Original file replaced with OCR-enhanced searchable version")
+            logger.info("Original file replaced with OCR-enhanced version")
 
             size_kb = os.path.getsize(input_path) / 1024
             logger.info(f"Final PDF size: {size_kb:.1f} KB")
+
+            check_if_searchable(input_path)
 
             print(input_path)
 
