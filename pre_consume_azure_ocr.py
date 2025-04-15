@@ -6,7 +6,6 @@ import logging
 import tempfile
 import shutil
 import requests
-from azure.core.credentials import AzureKeyCredential
 
 # Logging setup (Paperless style)
 log_path = "/opt/paperless/data/log/paperless.log"
@@ -38,12 +37,27 @@ def remove_empty_pages(pdf_path):
     doc.save(pdf_path)
     return removed
 
+def log_pdf_info(pdf_path):
+    try:
+        size_kb = os.path.getsize(pdf_path) / 1024
+        logger.info(f"Final PDF size: {size_kb:.1f} KB")
+
+        doc = fitz.open(pdf_path)
+        all_text = ""
+        for page in doc:
+            all_text += page.get_text()
+
+        logger.debug(f"Extracted OCR text from final PDF:\n{all_text[:3000]}{'...' if len(all_text) > 3000 else ''}")
+    except Exception as e:
+        logger.warning(f"Failed to log PDF info: {e}")
+
 def request_searchable_pdf(input_pdf, output_pdf):
     if not endpoint or not key:
         logger.error("Azure credentials not set.")
         sys.exit(1)
 
-    url = f"{endpoint}/formrecognizer/documentModels/prebuilt-read:analyze?api-version=2023-07-31-preview&outputContentFormat=application/pdf"
+    url = f"{endpoint}/documentintelligence/documentModels/prebuilt-read:analyze"           "?_overload=analyzeDocument&api-version=2024-11-30&output=pdf"
+
     headers = {
         "Content-Type": "application/pdf",
         "Ocp-Apim-Subscription-Key": key
@@ -77,6 +91,8 @@ def main():
 
             shutil.copyfile(temp_output_pdf, input_path)
             logger.info(f"Original file replaced with Azure searchable PDF: {input_path}")
+
+            log_pdf_info(input_path)
 
             print(input_path)
     except Exception as e:
