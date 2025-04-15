@@ -41,11 +41,9 @@ def overlay_text(pdf_path, texts, out_path):
     doc = fitz.open(pdf_path)
     for i, page in enumerate(doc):
         if i < len(texts):
-            lines = texts[i].splitlines()
-            y = 40  # Startposition Y
-            for line in lines:
-                page.insert_text((40, y), line.strip(), fontsize=10, fontname="helv")
-                y += 12  # Zeilenabstand
+            text = texts[i]
+            rect = page.rect
+            page.insert_textbox(rect, text, fontsize=1.0, overlay=True)
     doc.set_metadata({
         "producer": "Azure OCR Overlay Script",
         "title": "Searchable PDF",
@@ -71,18 +69,15 @@ def remove_empty_pages(pdf_path, texts, out_path):
     doc.save(out_path)
     return removed
 
-def check_pdfminer_text(path):
+def debug_pdfminer_check(path):
     try:
         text = extract_text(path)
         if text.strip():
-            logger.info("✔ PDF is searchable according to pdfminer (extract_text returned content).")
-            return True
+            logger.debug("✔ PDF is searchable according to pdfminer.")
         else:
-            logger.warning("!!! pdfminer sees NO searchable text – Paperless may re-OCR.")
-            return False
+            logger.debug("✘ pdfminer sees NO searchable text.")
     except Exception as e:
-        logger.error(f"pdfminer failed: {e}")
-        return False
+        logger.debug(f"pdfminer failed: {e}")
 
 def main():
     input_path = os.environ.get("DOCUMENT_WORKING_PATH")
@@ -90,7 +85,7 @@ def main():
         logger.error("DOCUMENT_WORKING_PATH not set.")
         sys.exit(1)
 
-    logger.info(f"Start final OCR overlay on working path: {input_path}")
+    logger.info(f"Start simple overlay OCR on: {input_path}")
 
     if not endpoint or not key:
         logger.error("Azure credentials not set.")
@@ -103,18 +98,18 @@ def main():
 
             texts = run_azure_ocr(input_path)
             overlay_text(input_path, texts, temp_pdf)
-            logger.info("Text overlay applied using insert_text per line with Helvetica font")
+            logger.info("Simple text overlay applied using insert_textbox")
 
             removed = remove_empty_pages(temp_pdf, texts, final_pdf)
             logger.info(f"Removed {removed} empty pages")
 
             shutil.copyfile(final_pdf, input_path)
-            logger.info("Replaced DOCUMENT_WORKING_PATH with OCR-enhanced version")
+            logger.info("Replaced working file with OCR-enhanced version")
 
             size_kb = os.path.getsize(input_path) / 1024
             logger.info(f"Final PDF size: {size_kb:.1f} KB")
 
-            check_pdfminer_text(input_path)
+            debug_pdfminer_check(input_path)
 
             print(input_path)
 
