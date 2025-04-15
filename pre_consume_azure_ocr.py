@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 import sys
 import os
-import tempfile
 import fitz  # PyMuPDF
 import logging
-from azure.ai.formrecognizer import DocumentAnalysisClient
+import tempfile
+import shutil
+import requests
 from azure.core.credentials import AzureKeyCredential
-from utils import image_to_pdf
 
-# Logging setup (Paperless-Style)
+# Logging setup (Paperless style)
 log_path = "/opt/paperless/data/log/paperless.log"
 logger = logging.getLogger("azure.ocr")
 logger.setLevel(logging.DEBUG)
@@ -17,32 +17,9 @@ formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(messag
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
-# Azure credentials
+# Azure setup
 endpoint = os.environ.get("AZURE_FORM_RECOGNIZER_ENDPOINT")
 key = os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
-
-def run_azure_ocr(pdf_path):
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"Sending file to Azure OCR: {pdf_path}")
-        logger.debug(f"OCR Endpoint: {endpoint}")
-    with open(pdf_path, "rb") as f:
-        poller = client.begin_analyze_document("prebuilt-read", document=f)
-        result = poller.result()
-
-    pages_text = []
-    for page in result.pages:
-        page_text = "\n".join([line.content for line in page.lines])
-        pages_text.append(page_text)
-    return pages_text
-
-def overlay_text(pdf_path, texts, out_path):
-    doc = fitz.open(pdf_path)
-    for i, page in enumerate(doc):
-        if i < len(texts):
-            text = texts[i]
-            rect = page.rect
-            page.insert_textbox(rect, text, fontsize=0.1, overlay=False)
-    doc.save(out_path)
 
 def is_visually_empty(page, threshold=10):
     pix = page.get_pixmap(dpi=50, colorspace="gray")
@@ -50,58 +27,60 @@ def is_visually_empty(page, threshold=10):
     nonwhite_pixels = sum(1 for px in pixel_data if px < 250)
     return nonwhite_pixels < threshold
 
-def remove_empty_pages(pdf_path, texts, out_path):
+def remove_empty_pages(pdf_path):
     doc = fitz.open(pdf_path)
     removed = 0
     for i in reversed(range(len(doc))):
-        text_empty = i >= len(texts) or len(texts[i].strip()) < 5
-        visual_empty = is_visually_empty(doc[i])
-        if text_empty and visual_empty:
+        text = doc[i].get_text().strip()
+        if len(text) < 5 and is_visually_empty(doc[i]):
             doc.delete_page(i)
             removed += 1
-    doc.save(out_path)
+    doc.save(pdf_path)
     return removed
+
+def request_searchable_pdf(input_pdf, output_pdf):
+    if not endpoint or not key:
+        logger.error("Azure credentials not set.")
+        sys.exit(1)
+
+    url = f"{endpoint}/formrecognizer/documentModels/prebuilt-read:analyze?api-version=2023-07-31-preview&outputContentFormat=application/pdf"
+    headers = {
+        "Content-Type": "application/pdf",
+        "Ocp-Apim-Subscription-Key": key
+    }
+
+    with open(input_pdf, "rb") as f:
+        response = requests.post(url, headers=headers, data=f)
+
+    if response.status_code != 200:
+        logger.error(f"Azure OCR request failed: {response.status_code} {response.text}")
+        sys.exit(1)
+
+    with open(output_pdf, "wb") as f:
+        f.write(response.content)
+
+    logger.debug("Azure OCR PDF saved to: %s", output_pdf)
 
 def main():
     input_path = sys.argv[1]
-    logger.info(f"Start pre_consume script for: {input_path}")
-
-    file_ext = os.path.splitext(input_path)[1].lower()
-    temp_dir = tempfile.mkdtemp()
-
-    if not endpoint or not key:
-        logger.error("Azure credentials not set")
-        sys.exit(1)
-
-    global client
-    client = DocumentAnalysisClient(endpoint, AzureKeyCredential(key))
+    logger.info(f"Start Azure OCR for: {input_path}")
 
     try:
-        if file_ext in [".jpg", ".jpeg", ".png", ".tiff", ".bmp"]:
-            temp_pdf = os.path.join(temp_dir, "converted.pdf")
-            image_to_pdf(input_path, temp_pdf)
-            source_pdf = temp_pdf
-        else:
-            source_pdf = input_path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_output_pdf = os.path.join(tmpdir, "azure_ocr_output.pdf")
 
-        texts = run_azure_ocr(source_pdf)
-        total_chars = sum(len(t) for t in texts)
-        logger.info(f"OCR successful, {len(texts)} pages returned, {total_chars} characters")
+            request_searchable_pdf(input_path, temp_output_pdf)
+            logger.info("Azure OCR request successful")
 
-        ocr_pdf = os.path.join(temp_dir, "with_ocr.pdf")
-        cleaned_pdf = input_path.replace(".pdf", "_ocr_cleaned.pdf")
+            removed = remove_empty_pages(temp_output_pdf)
+            logger.info(f"Removed {removed} empty pages")
 
-        overlay_text(source_pdf, texts, ocr_pdf)
-        logger.info("Overlay text complete")
+            shutil.copyfile(temp_output_pdf, input_path)
+            logger.info(f"Original file replaced with Azure searchable PDF: {input_path}")
 
-        removed_pages = remove_empty_pages(ocr_pdf, texts, cleaned_pdf)
-        logger.info(f"Empty pages removed: {removed_pages}; final file: {cleaned_pdf}")
-
-        logger.info("Script finished successfully")
-        print(cleaned_pdf)
-
+            print(input_path)
     except Exception as e:
-        logger.error(f"Unhandled exception: {str(e)}")
+        logger.error(f"Unhandled exception: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
