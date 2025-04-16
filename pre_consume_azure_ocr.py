@@ -7,10 +7,11 @@ import logging
 import shutil
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
-from pdfminer.high_level import extract_text
+
 
 # Logging setup
-log_path = "/opt/paperless/data/log/paperless.log"
+log_dir = os.environ.get("PAPERLESS_LOGGING_DIR")
+log_path = f"{log_dir}/paperless.log"
 logger = logging.getLogger("azure.ocr")
 logger.setLevel(logging.INFO)
 file_handler = logging.FileHandler(log_path)
@@ -44,11 +45,6 @@ def overlay_text(pdf_path, texts, out_path):
             text = texts[i]
             rect = page.rect
             page.insert_textbox(rect, text, fontsize=1.0, overlay=True)
-    # doc.set_metadata({
-    #    "producer": "Azure OCR Overlay Script",
-    #    "title": "Searchable PDF",
-    #    "author": "Paperless OCR",
-    #})
     doc.save(out_path, garbage=4, deflate=True, clean=True, incremental=False)
 
 def is_visually_empty(page, threshold=10):
@@ -68,16 +64,6 @@ def remove_empty_pages(pdf_path, texts, out_path):
             removed += 1
     doc.save(out_path)
     return removed
-
-def debug_pdfminer_check(path):
-    try:
-        text = extract_text(path)
-        if text.strip():
-            logger.debug("✔ PDF is searchable according to pdfminer.")
-        else:
-            logger.debug("✘ pdfminer sees NO searchable text.")
-    except Exception as e:
-        logger.debug(f"pdfminer failed: {e}")
 
 def main():
     input_path = os.environ.get("DOCUMENT_WORKING_PATH")
@@ -108,9 +94,7 @@ def main():
             logger.debug("Replaced working file with OCR-enhanced version")
 
             size_kb = os.path.getsize(input_path) / 1024
-            logger.info(f"Final PDF size: {size_kb:.1f} KB")
-
-            # debug_pdfminer_check(input_path)
+            logger.debug(f"Final PDF size: {size_kb:.1f} KB")
 
             print(input_path)
 
