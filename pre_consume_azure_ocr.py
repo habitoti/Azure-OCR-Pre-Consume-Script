@@ -10,9 +10,8 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 
 
 # Logging setup
-# log_dir = os.environ.get("PAPERLESS_LOGGING_DIR") # doesn't work, points to /opt/paperless/src/None ???
-log_dir = os.environ.get("PAPERLESS_DATA_DIR")
-log_path = f"{log_dir}/log/paperless.log"
+log_dir = os.environ.get("PAPERLESS_LOGGING_DIR", f"{os.environ.get("PAPERLESS_DATA_DIR")}/log")
+log_path = f"{log_dir}/paperless.log"
 logger = logging.getLogger("azure.ocr")
 logger.setLevel(logging.INFO)
 file_handler = logging.FileHandler(log_path)
