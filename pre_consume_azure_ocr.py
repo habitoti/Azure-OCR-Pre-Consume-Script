@@ -8,7 +8,6 @@ import shutil
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
 
-
 # Logging setup
 log_dir = os.environ.get("PAPERLESS_LOGGING_DIR", f"{os.environ.get('PAPERLESS_DATA_DIR')}/log")
 log_path = f"{log_dir}/paperless.log"
@@ -23,6 +22,10 @@ logger.addHandler(file_handler)
 endpoint = os.environ.get("AZURE_FORM_RECOGNIZER_ENDPOINT")
 key = os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
 
+# OCR Content Cutoff
+DEFAULT_CUTOFF = 15000
+cutoff_limit = int(os.environ.get("OCR_CONTENT_CUTOFF", DEFAULT_CUTOFF))
+
 def run_azure_ocr(pdf_path):
     client = DocumentAnalysisClient(endpoint, AzureKeyCredential(key))
     with open(pdf_path, "rb") as f:
@@ -30,12 +33,19 @@ def run_azure_ocr(pdf_path):
         result = poller.result()
 
     pages_text = []
+    current_length = 0
     for page in result.pages:
+        if current_length >= cutoff_limit:
+            break
         page_text = "\n".join([line.content for line in page.lines])
+        if current_length + len(page_text) > cutoff_limit:
+            # Truncate to exact cutoff
+            remaining = cutoff_limit - current_length
+            page_text = page_text[:remaining]
         pages_text.append(page_text)
+        current_length += len(page_text)
 
-    total_chars = sum(len(t) for t in pages_text)
-    logger.info(f"OCR successful, {len(pages_text)} pages returned, {total_chars} characters")
+    logger.info(f"OCR successful, {len(pages_text)} pages returned (cutoff at {cutoff_limit} chars), total characters: {current_length}")
     return pages_text
 
 def overlay_text(pdf_path, texts, out_path):
@@ -45,6 +55,11 @@ def overlay_text(pdf_path, texts, out_path):
             text = texts[i]
             rect = page.rect
             page.insert_textbox(rect, text, fontsize=1.0, overlay=True)
+    doc.set_metadata({
+        "producer": "Azure OCR Overlay Script",
+        "title": "Searchable PDF",
+        "author": "Paperless OCR",
+    })
     doc.save(out_path, garbage=4, deflate=True, clean=True, incremental=False)
 
 def is_visually_empty(page, threshold=10):
@@ -71,7 +86,7 @@ def main():
         logger.error("DOCUMENT_WORKING_PATH not set.")
         sys.exit(1)
 
-    logger.debug(f"Start simple overlay OCR on: {input_path}")
+    logger.info(f"Start OCR with text cutoff at {cutoff_limit} characters: {input_path}")
 
     if not endpoint or not key:
         logger.error("Azure credentials not set.")
@@ -84,17 +99,17 @@ def main():
 
             texts = run_azure_ocr(input_path)
             overlay_text(input_path, texts, temp_pdf)
-            # logger.debug("Simple text overlay applied using insert_textbox")
+            logger.info("Overlay text applied")
 
             removed = remove_empty_pages(temp_pdf, texts, final_pdf)
-            if removed > 0: 
+            if removed > 0:
                 logger.info(f"Removed {removed} empty pages")
 
             shutil.copyfile(final_pdf, input_path)
-            logger.debug("Replaced working file with OCR-enhanced version")
+            logger.info("Final file written back")
 
             size_kb = os.path.getsize(input_path) / 1024
-            logger.debug(f"Final PDF size: {size_kb:.1f} KB")
+            logger.info(f"Final PDF size: {size_kb:.1f} KB")
 
             print(input_path)
 
