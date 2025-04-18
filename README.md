@@ -84,7 +84,7 @@ environment:
 
 ## Notes
 
-- When you set a content cutoff, only as many pages as will fit into the total character limit will be made searchable for Paperless-ngx. As a rule of thumb, about 2000 characters make up a completly filled text page. You'll need about 500 tokens to have AI look at that page later on, e.g. with paperless-ai. So if you have for example an 8K token limit per prompt on your model (or just don't want to spend more per query), you'll be on the safe side with a 15-20k character limit, or about 8-10 pages (might be more or less depending on type of document). This leaves sufficient space for the actual prompt that describes what AI should do with the content.
+- When you set a content cutoff, only as many pages as fit within the total character limit will be made searchable by Paperless-ngx. As a rule of thumb, a fully filled text page contains roughly 2,000 characters. To process that content with AI tools like Paperless-AI, you’ll typically need around 500 tokens per page. For example, if your model has an 8k token limit per prompt (or if you simply want to reduce processing cost), a cutoff of 15,000 to 20,000 characters—equivalent to about 8–10 pages—is a safe and practical choice. The exact number of pages may vary depending on the document type and density. This approach also ensures there’s enough room left in the prompt for the actual instructions to the AI, such as what kind of tags or metadata should be extracted.
 - Azure Document Intelligence must support PDF input (v4.0+ REST API).
 - Logging entries are prefixed with `[azure.ocr]` for easy filtering.
 
