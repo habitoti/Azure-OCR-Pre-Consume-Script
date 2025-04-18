@@ -2,6 +2,10 @@
 
 This script enables Azure Document Intelligence as the OCR engine for [Paperless-ngx](https://github.com/paperless-ngx/paperless-ngx). It generates a searchable PDF by overlaying recognized text onto the original document. Empty pages are removed based on visual and textual content.
 
+Azure Document Intelligence has a really superior recognition quality, even for handwritten notes or receipts or bad quality scans. The pricing is also very moderate, with about 1.4$ per thousand pages, no matter how much content is on each. It is also much faster than the built-in Tesseract recognition, and even very long documents are parsed in seconds.
+
+Downstream of Paperless-ngx processing, I am running the awesome [Paperless-AI](https://github.com/clusterzx/paperless-ai). With its flexibility of a custom query you can achieve great resulöts in tagging and metadata extraction, especially if the content from OCR is almost perfect. As of today, though, there is no limitation on the content that Paperless-ai feeds into the prompt. As my used Azure OpenAI GPT-4o-mini model is limited to 8k token per prompt, very large documents might not be processed altogether. So I included an optional content cutoff that can limit the recognized data. Usually, most every day documents are shorter anyhow, and very long documents have the relevant searchable content onthe first few pages anyhow, so limiting content to 15k-20k characters does not actual harm, but restricts the final prompt to a reasonable size.  
+
 ## Features
 
 - ✅ Uses Azure Document Intelligence for high-quality OCR, includinhg handwriting
@@ -54,7 +58,7 @@ PAPERLESS_PRE_CONSUME_SCRIPT=<full path of pre-consume script>
 
 ## Docker Setup
 
-Admittedly, I haven't tested the docker setup, as I am running it bare metal. So any feedback whether this setup (copy/pasted from elsewhere) works is appreciated, so I can update it accordingly.
+> **Note:** Admittedly, I haven't tested the docker setup, as I am running it bare metal. So any feedback whether this setup (copy/pasted from elsewhere) works is appreciated, so I can update it accordingly.
 
 If running inside the Paperless Docker container:
 
