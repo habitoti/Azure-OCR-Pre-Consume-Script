@@ -1,0 +1,11 @@
+version: "3.4"
+
+services:
+  paperless:
+    environment:
+      AZURE_FORM_RECOGNIZER_ENDPOINT: "https://<your-endpoint>.cognitiveservices.azure.com/"
+      AZURE_FORM_RECOGNIZER_KEY: "<your-key>"
+      OCR_CONTENT_CUTOFF: "15000"
+      PAPERLESS_PRE_CONSUME_SCRIPT: /scripts/azure_ocr_preconsume/pre_consume_azure_ocr.py
+    volumes:
+      - ./azure_ocr_preconsume:/scripts/azure_ocr_preconsume
