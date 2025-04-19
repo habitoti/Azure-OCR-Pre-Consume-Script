@@ -58,7 +58,7 @@ def overlay_text(pdf_path, texts, out_path):
         if i < len(texts):
             text = texts[i]
             rect = page.rect
-            page.insert_textbox(rect, text, fontsize=1.0, overlay=True)
+            page.insert_textbox(rect, text, fontsize=1.0, overlay=False)
     doc.save(out_path, garbage=4, deflate=True, clean=True, incremental=False)
 
 def is_visually_empty(page, threshold=10):
