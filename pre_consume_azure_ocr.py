@@ -58,7 +58,27 @@ def overlay_text(pdf_path, texts, out_path):
         if i < len(texts):
             text = texts[i]
             rect = page.rect
-            page.insert_textbox(rect, text, fontsize=1.0, overlay=False)
+
+            # Insert safe word in white, visible to PDF parsers
+            safe_word = f"azure-ocr-p{i + 1}"
+            page.insert_text(
+                point=(10, 10),
+                text=safe_word,
+                fontsize=1.0,
+                color=(1, 1, 1),
+                render_mode=0,
+                overlay=True
+            )
+
+            # Insert actual OCR content as invisible
+            page.insert_textbox(
+                rect=rect,
+                text=text,
+                fontsize=1.0,
+                color=(1, 1, 1),  # Ignored in invisible render mode
+                render_mode=3,
+                overlay=True
+            )
     doc.save(out_path, garbage=4, deflate=True, clean=True, incremental=False)
 
 def is_visually_empty(page, threshold=10):
