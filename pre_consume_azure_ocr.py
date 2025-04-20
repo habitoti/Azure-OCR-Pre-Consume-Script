@@ -62,8 +62,8 @@ def overlay_text(pdf_path, texts, out_path):
             # Insert safe word in white, visible to PDF parsers
             safe_word = f"azure-ocr-p{i + 1}"
             page.insert_text(
-                point=(10, 10),
-                text=safe_word,
+                (10, 10),
+                safe_word,
                 fontsize=1.0,
                 color=(1, 1, 1),
                 render_mode=0,
@@ -72,8 +72,8 @@ def overlay_text(pdf_path, texts, out_path):
 
             # Insert actual OCR content as invisible
             page.insert_textbox(
-                rect=rect,
-                text=text,
+                rect,
+                text,
                 fontsize=1.0,
                 color=(1, 1, 1),  # Ignored in invisible render mode
                 render_mode=3,
