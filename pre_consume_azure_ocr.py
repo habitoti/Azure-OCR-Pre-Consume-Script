@@ -35,15 +35,20 @@ def run_azure_ocr(pdf_path):
     pages_text = []
     current_length = 0
     for page in result.pages:
-        if cutoff_limit > 0 and current_length >= cutoff_limit:
-            break
         page_text = "\n".join([line.content for line in page.lines])
-        if cutoff_limit > 0 and current_length + len(page_text) > cutoff_limit:
-            # Truncate to exact cutoff
-            remaining = cutoff_limit - current_length
-            page_text = page_text[:remaining]
+        text_len = len(page_text)
+
+        # Skip or trim based on cutoff
+        if cutoff_limit > 0:
+            if current_length >= cutoff_limit:
+                break
+            if current_length + text_len > cutoff_limit:
+                remaining = cutoff_limit - current_length
+                page_text = page_text[:remaining]
+                text_len = len(page_text)  # adjust length after trimming
+
         pages_text.append(page_text)
-        current_length += len(page_text)
+        current_length += text_len
 
     if cutoff_limit > 0:
         logger.info(f"OCR successful, {len(pages_text)} pages returned (cutoff at {cutoff_limit} chars), total characters: {current_length}")
@@ -59,16 +64,16 @@ def overlay_text(pdf_path, texts, out_path):
             text = texts[i]
             rect = page.rect
 
-            # Insert safe word in white, visible to PDF parsers
-            safe_word = f"azure-ocr-p{i + 1}"
-            page.insert_text(
-                (10, 10),
-                safe_word,
-                fontsize=1.0,
-                color=(1, 1, 1),
-                render_mode=0,
-                overlay=True
-            )
+            # Insert safe word on first page in white, visible to PDF parsers
+            if i == 0:
+                page.insert_text(
+                    (1, 1),
+                    "azure-ocr",
+                    fontsize=1.0,
+                    color=(1, 1, 1),
+                    render_mode=0,
+                    overlay=True
+                )
 
             # Insert actual OCR content as invisible
             page.insert_textbox(
