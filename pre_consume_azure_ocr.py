@@ -26,6 +26,13 @@ key = os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
 DEFAULT_CUTOFF = 0 # i.e. no cutoff
 cutoff_limit = int(os.environ.get("OCR_CONTENT_CUTOFF", DEFAULT_CUTOFF))
 
+def is_pdf_searchable(pdf_path):
+    with fitz.open(pdf_path) as doc:
+        for page in doc:
+            if page.get_text().strip():
+                return True
+    return False
+
 def run_azure_ocr(pdf_path):
     client = DocumentAnalysisClient(endpoint, AzureKeyCredential(key))
     with open(pdf_path, "rb") as f:
@@ -124,19 +131,22 @@ def main():
             temp_pdf = os.path.join(temp_dir, "ocr_overlay.pdf")
             final_pdf = os.path.join(temp_dir, "cleaned.pdf")
 
-            texts = run_azure_ocr(input_path)
-            overlay_text(input_path, texts, temp_pdf)
-            logger.debug("Overlay text applied")
+            if is_pdf_searchable(input_path):
+                logger.info("PDF already contains searchable text – skipping Azure OCR")
+            else:
+                texts = run_azure_ocr(input_path)
+                overlay_text(input_path, texts, temp_pdf)
+                logger.debug("Overlay text applied")
 
-            removed = remove_empty_pages(temp_pdf, texts, final_pdf)
-            if removed > 0:
-                logger.info(f"Removed {removed} empty pages")
+                removed = remove_empty_pages(temp_pdf, texts, final_pdf)
+                if removed > 0:
+                    logger.info(f"Removed {removed} empty pages")
 
-            shutil.copyfile(final_pdf, input_path)
-            logger.debug("Final file written back")
+                shutil.copyfile(final_pdf, input_path)
+                logger.debug("Final file written back")
 
-            size_kb = os.path.getsize(input_path) / 1024
-            logger.debug(f"Final PDF size: {size_kb:.1f} KB")
+                size_kb = os.path.getsize(input_path) / 1024
+                logger.debug(f"Final PDF size: {size_kb:.1f} KB")
 
             print(input_path)
 
