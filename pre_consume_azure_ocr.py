@@ -9,7 +9,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
 
 # Logging setup
-log_dir = ""/usr/src/paperless/data" # hardcoded Docker install default
+log_dir = "/usr/src/paperless/data" # hardcoded Docker install default
 log_dir = f"{os.environ.get('PAPERLESS_DATA_DIR', log_dir)}/log"
 log_dir = os.environ.get("PAPERLESS_LOGGING_DIR", log_dir)
 log_path = f"{log_dir}/paperless.log"
