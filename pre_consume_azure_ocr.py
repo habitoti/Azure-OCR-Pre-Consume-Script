@@ -4,7 +4,7 @@ import os
 import tempfile
 import fitz  # PyMuPDF
 import logging
-from PIL import Image
+import shutil
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
 
@@ -34,23 +34,6 @@ key = os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
 # OCR Content Cutoff
 DEFAULT_CUTOFF = 0 # i.e. no cutoff
 cutoff_limit = int(os.environ.get("OCR_CONTENT_CUTOFF", DEFAULT_CUTOFF))
-
-
-def convert_image_to_pdf(image_path):
-    img = Image.open(image_path).convert("RGB")
-    fd, tmp_pdf_path = tempfile.mkstemp(suffix=".pdf")
-    os.close(fd)
-    img.save(tmp_pdf_path, "PDF")
-    return tmp_pdf_path
-
-def prepare_pdf_for_ocr(input_path):
-    # Return tuple: (actual_pdf_path, is_temp_file)
-    if input_path.lower().endswith(".pdf"):
-        return input_path, False
-    else:
-        logger.info(f"Converting {input_path} to PDF.")
-        pdf_path = convert_image_to_pdf(input_path)
-        return pdf_path, True
 
 def is_pdf_searchable(pdf_path):
     with fitz.open(pdf_path) as doc:
@@ -118,22 +101,39 @@ def overlay_text(pdf_path, texts, out_path):
                 overlay=True
             )
     doc.save(out_path, garbage=4, deflate=True, clean=True, incremental=False)
-    doc.close()
+
+def is_visually_empty(page, threshold=10):
+    pix = page.get_pixmap(dpi=50, colorspace="gray")
+    pixel_data = pix.samples
+    nonwhite_pixels = sum(1 for px in pixel_data if px < 250)
+    return nonwhite_pixels < threshold
+
+def remove_empty_pages(pdf_path, texts, out_path):
+    doc = fitz.open(pdf_path)
+    removed = 0
+    for i in reversed(range(len(doc))):
+        text_empty = i >= len(texts) or len(texts[i].strip()) < 5
+        visual_empty = is_visually_empty(doc[i])
+        if text_empty and visual_empty:
+            doc.delete_page(i)
+            removed += 1
+    doc.save(out_path)
+    return removed
 
 def main():
-    if len(sys.argv) != 2:
-        logger.error("Usage: pre_consume_azure_ocr.py <input.pdf>")
-        sys.exit(1)
-
-    input_path = sys.argv[1]
-    pdf_path, was_temp = prepare_pdf_for_ocr(input_path)
 
     if not endpoint or not key:
         logger.error("Azure credentials not set.")
         sys.exit(1)
 
-    if is_pdf_searchable(pdf_path):
-        logger.info("✔ PDF is already searchable – skipping Azure OCR.")
+    if len(sys.argv) != 2:
+        logger.error("Usage: pre_consume_azure_ocr.py <input.pdf>")
+        sys.exit(1)
+
+    input_path = sys.argv[1]
+
+    if not input_path.lower().endswith(".pdf"):
+        logger.info("Non-PDF input – skipping Azure OCR, letting Paperless handle it.")
         print(input_path)
         return
 
@@ -143,16 +143,28 @@ def main():
         logger.info(f"Start OCR for {input_path}")
 
     try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_pdf = os.path.join(temp_dir, "ocr_overlay.pdf")
+            final_pdf = os.path.join(temp_dir, "cleaned.pdf")
 
-        texts = run_azure_ocr(pdf_path)
-        fd, output_path = tempfile.mkstemp(suffix=".pdf")
-        os.close(fd)
+            if is_pdf_searchable(input_path):
+                logger.info("PDF already contains searchable text – skipping Azure OCR")
+            else:
+                texts = run_azure_ocr(input_path)
+                overlay_text(input_path, texts, temp_pdf)
+                logger.debug("Overlay text applied")
 
-        overlay_text(pdf_path, texts, output_path)
-        logger.debug("Overlay text applied")
+                removed = remove_empty_pages(temp_pdf, texts, final_pdf)
+                if removed > 0:
+                    logger.info(f"Removed {removed} empty pages")
 
-        logger.info(f"Final output written to {output_path}")
-        print(output_path)
+                shutil.copyfile(final_pdf, input_path)
+                logger.debug("Final file written back")
+
+                size_kb = os.path.getsize(input_path) / 1024
+                logger.debug(f"Final PDF size: {size_kb:.1f} KB")
+
+            print(input_path)
 
     except Exception as e:
         logger.error(f"Unhandled exception: {e}")
