@@ -4,7 +4,6 @@ import os
 import tempfile
 import fitz  # PyMuPDF
 import logging
-import shutil
 from PIL import Image
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
@@ -120,12 +119,6 @@ def overlay_text(pdf_path, texts, out_path):
             )
     doc.save(out_path, garbage=4, deflate=True, clean=True, incremental=False)
     doc.close()
-
-def is_visually_empty(page, threshold=10):
-    pix = page.get_pixmap(dpi=50, colorspace="gray")
-    pixel_data = pix.samples
-    nonwhite_pixels = sum(1 for px in pixel_data if px < 250)
-    return nonwhite_pixels < threshold
 
 def main():
     if len(sys.argv) != 2:
