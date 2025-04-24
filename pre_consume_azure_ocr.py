@@ -127,19 +127,6 @@ def is_visually_empty(page, threshold=10):
     nonwhite_pixels = sum(1 for px in pixel_data if px < 250)
     return nonwhite_pixels < threshold
 
-def remove_empty_pages(pdf_path, texts, out_path):
-    doc = fitz.open(pdf_path)
-    removed = 0
-    for i in reversed(range(len(doc))):
-        text_empty = i >= len(texts) or len(texts[i].strip()) < 5
-        visual_empty = is_visually_empty(doc[i])
-        if text_empty and visual_empty:
-            doc.delete_page(i)
-            removed += 1
-    doc.save(out_path)
-    doc.close()
-    return removed
-
 def main():
     if len(sys.argv) != 2:
         logger.error("Usage: pre_consume_azure_ocr.py <input.pdf>")
@@ -170,10 +157,6 @@ def main():
 
         overlay_text(pdf_path, texts, output_path)
         logger.debug("Overlay text applied")
-
-        removed = remove_empty_pages(output_path, texts, output_path)
-        if removed > 0:
-            logger.info(f"Removed {removed} empty pages")
 
         logger.info(f"Final output written to {output_path}")
         print(output_path)
