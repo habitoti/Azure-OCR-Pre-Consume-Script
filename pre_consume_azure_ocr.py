@@ -126,11 +126,10 @@ def main():
         logger.error("Azure credentials not set.")
         sys.exit(1)
 
-    if len(sys.argv) != 2:
-        logger.error("Usage: pre_consume_azure_ocr.py <input.pdf>")
+    input_path = os.environ.get("DOCUMENT_WORKING_PATH")
+    if not input_path:
+        logger.error("DOCUMENT_WORKING_PATH not set.")
         sys.exit(1)
-
-    input_path = sys.argv[1]
 
     if not input_path.lower().endswith(".pdf"):
         logger.info("Non-PDF input – skipping Azure OCR, letting Paperless handle it.")
