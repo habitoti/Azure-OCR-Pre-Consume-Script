@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 import sys
 import os
+import traceback
 import tempfile
 import fitz  # PyMuPDF
 import logging
 import shutil
+from pathlib import Path
+from PIL import Image
+
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
 
@@ -34,6 +38,7 @@ key = os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
 # OCR Content Cutoff
 DEFAULT_CUTOFF = 0 # i.e. no cutoff
 cutoff_limit = int(os.environ.get("OCR_CONTENT_CUTOFF", DEFAULT_CUTOFF))
+
 
 def is_pdf_searchable(pdf_path):
     with fitz.open(pdf_path) as doc:
@@ -102,72 +107,60 @@ def overlay_text(pdf_path, texts, out_path):
             )
     doc.save(out_path, garbage=4, deflate=True, clean=True, incremental=False)
 
-def is_visually_empty(page, threshold=10):
-    pix = page.get_pixmap(dpi=50, colorspace="gray")
-    pixel_data = pix.samples
-    nonwhite_pixels = sum(1 for px in pixel_data if px < 250)
-    return nonwhite_pixels < threshold
-
-def remove_empty_pages(pdf_path, texts, out_path):
-    doc = fitz.open(pdf_path)
-    removed = 0
-    for i in reversed(range(len(doc))):
-        text_empty = i >= len(texts) or len(texts[i].strip()) < 5
-        visual_empty = is_visually_empty(doc[i])
-        if text_empty and visual_empty:
-            doc.delete_page(i)
-            removed += 1
-    doc.save(out_path)
-    return removed
 
 def main():
 
     if not endpoint or not key:
-        logger.error("Azure credentials not set.")
+        logger.error("❌ Azure credentials not set")
         sys.exit(1)
 
     input_path = os.environ.get("DOCUMENT_WORKING_PATH")
     if not input_path:
-        logger.error("DOCUMENT_WORKING_PATH not set.")
+        logger.error("❌ DOCUMENT_WORKING_PATH not set")
         sys.exit(1)
 
-    if not input_path.lower().endswith(".pdf"):
+    src_file = Path(input_path).resolve()
+    if not src_file.is_file():
+        logger.error(f"❌ Input file missing: {src_file}")
+        sys.exit(1)
+
+    if not src_file.suffix.lower() == ".pdf":
         logger.info("Non-PDF input – skipping Azure OCR, letting Paperless handle it.")
-        print(input_path)
+        print(src_file)
+        return
+
+    if is_pdf_searchable(src_file):
+        logger.info("PDF already contains searchable text – skipping Azure OCR")
+        print(src_file)
         return
 
     if cutoff_limit > 0:
-        logger.info(f"Start OCR with text cutoff at {cutoff_limit} chars for {input_path}")
+        logger.info(f"Start OCR with text cutoff at {cutoff_limit} chars for {src_file}")
     else:
-        logger.info(f"Start OCR for {input_path}")
+        logger.info(f"Start OCR for {src_file}")
 
-    try:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_pdf = os.path.join(temp_dir, "ocr_overlay.pdf")
-            final_pdf = os.path.join(temp_dir, "cleaned.pdf")
+    texts = run_azure_ocr(src_file)
 
-            if is_pdf_searchable(input_path):
-                logger.info("PDF already contains searchable text – skipping Azure OCR")
-            else:
-                texts = run_azure_ocr(input_path)
-                overlay_text(input_path, texts, temp_pdf)
-                logger.debug("Overlay text applied")
+    # text overlay needs to be written to a different tmp-file
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=os.path.dirname(input_path)) as tmp:
+        tmp_pdf = Path(tmp.name)
 
-                removed = remove_empty_pages(temp_pdf, texts, final_pdf)
-                if removed > 0:
-                    logger.info(f"Removed {removed} empty pages")
+    overlay_text(src_file, texts, tmp_pdf)
+    logger.debug("Overlay text applied to {tmp_pdf}")
 
-                shutil.copyfile(final_pdf, input_path)
-                logger.debug("Final file written back")
+    shutil.move(tmp_pdf, src_file)
+    logger.debug("Overlay file moved back to input")
 
-                size_kb = os.path.getsize(input_path) / 1024
-                logger.debug(f"Final PDF size: {size_kb:.1f} KB")
+    size_kb = os.path.getsize(src_file) / 1024
+    logger.debug(f"Final PDF size: {size_kb:.1f} KB")
 
-            print(input_path)
+    print(src_file)
 
-    except Exception as e:
-        logger.error(f"Unhandled exception: {e}")
-        sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        logger.error(f"❌ {exc}")
+        traceback.print_exc()
+        sys.exit(1)
