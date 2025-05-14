@@ -5,7 +5,7 @@ Azure Document Intelligence offers superior recognition quality—even for handw
 
 Downstream from Paperless-ngx, I’m using the excellent [Paperless-AI](https://github.com/clusterzx/paperless-ai). Thanks to its flexible query mechanism, it delivers great results for tagging and metadata extraction—especially now that the OCR content is nearly perfect. However, as of now, Paperless-AI does not limit the amount of content passed into the prompt. Since my Azure OpenAI GPT-4o-mini model is limited to 8k tokens per prompt, very large documents may not be processed at all.
 
-To address this, I’ve added an optional content cutoff that limits the amount of recognized text. In practice, most everyday documents are short enough, and even longer ones usually have the important content within the first few pages. Setting a cutoff of 15,000 to 20,000 characters helps reduce prompt size without sacrificing relevant context.
+To address this, I’ve added an optional content cutoff that limits the amount of recognized text. In practice, most everyday documents are short enough, and even longer ones usually have the important content within the first few pages. Setting a cutoff of 15,000 to 20,000 characters helps reduce prompt size without sacrificing relevant context. (Note: as of May 14th, 2025, there is a change on the way for Paperless-AI to introduce a configurable token limitation. Once this has been published, content limitation wouldn't be needed from that point on -- unless of course you also want to restrict the load on the Paperless search engine...)
 
 ## Features
 
@@ -84,9 +84,9 @@ environment:
 
 - Supports for now only PDF documents (as Paperless-NGX doesn't allow for changing of filetype during the pre_consume step). Other formats are handed back untouched for Paperless to proceed scanning itself.
 - When you set a content cutoff, only as many pages as fit within the total character limit will be made searchable by Paperless-ngx. As a rule of thumb, a fully filled text page contains roughly 2,000 characters. To process that content with AI tools like Paperless-AI, you’ll typically need around 500 tokens per page. For example, if your model has an 8k token limit per prompt (or if you simply want to reduce processing cost), a cutoff of 15,000 to 20,000 characters—equivalent to about 8–10 pages—is a safe and practical choice. The exact number of pages may vary depending on the document type and density. This approach also ensures there’s enough room left in the prompt for the actual instructions to the AI, such as what kind of tags or metadata should be extracted.
-- Azure Document Intelligence must support PDF input (v4.0+ REST API).
 - Logging entries are prefixed with `[azure.ocr]` for easy filtering.
-- If the implemented fallback mechanisms to determine the path of the logfile don't work for your setup, you can set the PAPERLESS_LOGGING_DIR environment variable.
+- If the implemented fallback mechanisms to determine the path of the logfile don't work for your setup, you can explicitly set the PAPERLESS_LOGGING_DIR environment variable.
+- As of May 14th, 2025, there is a change on the way for Paperless-AI to introduce a configurable token limitation. Once this has been published, OCR content limitation wouldn't be needed from that point on.
 
 ---
 
