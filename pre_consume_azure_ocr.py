@@ -36,9 +36,8 @@ endpoint = os.environ.get("AZURE_FORM_RECOGNIZER_ENDPOINT")
 key = os.environ.get("AZURE_FORM_RECOGNIZER_KEY")
 
 # OCR Content Cutoff
-DEFAULT_CUTOFF = 0 # i.e. no cutoff
-cutoff_limit = int(os.environ.get("OCR_CONTENT_CUTOFF", DEFAULT_CUTOFF))
-
+cutoff_limit = int(os.environ.get("OCR_CONTENT_CUTOFF", 0)) # default: no cutoff
+continue_on_error = bool(os.environ.get("OCR_CONTINUE_ON_ERROR", False)) # default: break processing on error
 
 def is_pdf_searchable(pdf_path):
     with fitz.open(pdf_path) as doc:
@@ -151,5 +150,10 @@ if __name__ == "__main__":
         main()
     except Exception as exc:
         logger.error(f"❌ {exc}")
-        traceback.print_exc()
-        sys.exit(1)
+        if logger.isEnabledFor(logging.DEBUG):
+            traceback.print_exc()
+        if continue_on_error:
+            logger.warning("Paperless will continue processing though Azure OCR failed")
+            print("src_file")
+        else:
+            sys.exit(1)

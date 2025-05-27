@@ -23,6 +23,7 @@ The script uses the following configuration variables:
 | `AZURE_FORM_RECOGNIZER_ENDPOINT` | Endpoint of your Azure resource             | Yes      |
 | `AZURE_FORM_RECOGNIZER_KEY`      | Azure API Key                               | Yes      |
 | `OCR_CONTENT_CUTOFF`             | Max character count (default: 0/no cutoff) | No   |
+| `OCR_CONTINUE_ON_ERROR`             | Should Paperless continue processing if OCR fails? (default: False/no) **Note**: it will always break for setup errors like missing API key etc. | No   |
 
 These paperless-ngx configuration variables need to be set:
 
