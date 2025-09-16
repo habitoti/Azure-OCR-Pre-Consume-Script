@@ -34,11 +34,15 @@ These paperless-ngx configuration variables need to be set:
 
 ## Installation (Bare Metal)
 
-1. Install system dependencies:
+1. Save requirements.txt to your pre-consume script folder and install system dependencies:
 
 ```bash
-sudo apt install python3-pip poppler-utils
-pip install azure-ai-formrecognizer pymupdf
+/opt/paperless/.venv/bin/python3 -m pip install -r requirements.txt
+```
+
+Note: if PIP is not yet available, run this first:
+```bash
+/opt/paperless/.venv/bin/python3 -m ensurepip --upgrade
 ```
 
 2. Save the script as `pre_consume_azure_ocr.py`, make it executable:
